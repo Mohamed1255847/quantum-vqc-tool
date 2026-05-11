@@ -1,15 +1,18 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
 import numpy as np
+import json
 
 from models import (
     TrainingRequest, TrainingResponse, PredictionRequest, PredictionResponse
 )
 from vqc import (
-    train_variational_classifier, predict, save_model, load_model, list_models
+    train_variational_classifier, train_variational_classifier_stream,
+    predict, save_model, load_model, list_models
 )
 
 app = FastAPI(title="Quantum Variational Classifier API", version="1.0.0")
@@ -79,6 +82,44 @@ async def train(request: TrainingRequest):
             final_cross_entropy_cost=history[-1].get("cost_cross_entropy"),
             final_accuracy=history[-1]["accuracy"] if history else 0,
             test_accuracy=history[-1]["accuracy"] if history else 0
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/train/stream")
+async def train_stream(request: TrainingRequest):
+    try:
+        X = [dp.features for dp in request.dataset]
+        Y = [float(dp.label) for dp in request.dataset]
+
+        encoding = str(request.circuit.encoding.value if hasattr(request.circuit.encoding, 'value') else request.circuit.encoding)
+        optimizer = str(request.training.optimizer.value if hasattr(request.training.optimizer, 'value') else request.training.optimizer)
+        loss_type = str(request.training.loss_type.value if hasattr(request.training.loss_type, 'value') else request.training.loss_type)
+
+        num_qubits = int(request.circuit.num_qubits)
+        num_layers = int(request.circuit.num_layers)
+        batch_size = int(request.training.batch_size)
+        max_iterations = int(request.training.max_iterations)
+        seed = int(request.training.seed) if request.training.seed else None
+        learning_rate = float(request.training.learning_rate)
+
+        def generate():
+            for event in train_variational_classifier_stream(
+                X=X, Y=Y, num_qubits=num_qubits, num_layers=num_layers,
+                encoding=encoding, optimizer_type=optimizer, loss_type=loss_type,
+                learning_rate=learning_rate, batch_size=batch_size,
+                max_iterations=max_iterations, seed=seed
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            }
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

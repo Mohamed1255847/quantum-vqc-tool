@@ -60,6 +60,11 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [backendConnected, setBackendConnected] = useState(false);
   const [showTrainingResults, setShowTrainingResults] = useState(false);
+  const [trainingProgress, setTrainingProgress] = useState(0);
+  const [currentIteration, setCurrentIteration] = useState(0);
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string | null>(null);
+  const [currentCost, setCurrentCost] = useState<number | null>(null);
+  const [currentAccuracy, setCurrentAccuracy] = useState<number | null>(null);
 
   const [circuitConfig, setCircuitConfig] = useState<CircuitConfigType>({
     num_qubits: 4,
@@ -131,6 +136,11 @@ function App() {
     setTrainingResult(null);
     setError(null);
     setShowTrainingResults(false);
+    setTrainingProgress(0);
+    setCurrentIteration(0);
+    setEstimatedTimeRemaining(null);
+    setCurrentCost(null);
+    setCurrentAccuracy(null);
   }, []);
 
   const handleStartTraining = async () => {
@@ -142,9 +152,14 @@ function App() {
     setIsTraining(true);
     setError(null);
     setShowTrainingResults(false);
+    setTrainingProgress(0);
+    setCurrentIteration(0);
+    setEstimatedTimeRemaining(null);
+    setCurrentCost(null);
+    setCurrentAccuracy(null);
 
     try {
-      const response = await fetch('http://localhost:8000/train', {
+      const response = await fetch('http://localhost:8000/train/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -159,11 +174,47 @@ function App() {
         throw new Error(errorData.detail || `HTTP ${response.status}`);
       }
 
-      const result = await response.json();
-      setTrainingResult({ weights: result.weights, bias: result.bias });
-      setTrainingHistory(result.training_history || []);
-      setShowTrainingResults(true);
-      setActiveTab('training');
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === 'progress') {
+                const pct = (data.iteration / data.max_iterations) * 100;
+                setTrainingProgress(pct);
+                setCurrentIteration(data.iteration);
+                setCurrentCost(data.cost);
+                setCurrentAccuracy(data.accuracy);
+
+                const avgTimePerIter = data.elapsed / data.iteration;
+                const remaining = avgTimePerIter * (data.max_iterations - data.iteration);
+                setEstimatedTimeRemaining(formatTime(Math.round(remaining)));
+                setActiveTab('training');
+              } else if (data.type === 'result') {
+                setTrainingResult({ weights: data.weights, bias: data.bias });
+                setTrainingHistory(data.training_history || []);
+                setShowTrainingResults(true);
+                setTrainingProgress(100);
+                setEstimatedTimeRemaining(null);
+              }
+            } catch {
+              // skip malformed JSON
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error('Training failed:', err);
       setError(`Training failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -346,6 +397,26 @@ function App() {
                         Clear Results
                       </Button>
                     </div>
+
+                    {isTraining && (
+                      <div className="space-y-3 rounded-lg border p-4">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Iteration {currentIteration} / {trainingConfig.max_iterations}</span>
+                          {estimatedTimeRemaining && (
+                            <span className="text-muted-foreground">ETA: {estimatedTimeRemaining}</span>
+                          )}
+                        </div>
+                        <Progress value={trainingProgress} className="h-3" />
+                        <div className="flex justify-between text-sm">
+                          <span>
+                            Cost: <span className="font-mono">{currentCost?.toFixed(6) ?? '—'}</span>
+                          </span>
+                          <span>
+                            Accuracy: <span className="font-mono">{currentAccuracy !== null ? `${(currentAccuracy * 100).toFixed(1)}%` : '—'}</span>
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {(showTrainingResults && trainingHistory.length > 0) && (
