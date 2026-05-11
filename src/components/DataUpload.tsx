@@ -1,0 +1,192 @@
+import { useState, useCallback } from 'react';
+import { Upload as UploadIcon, FileText, Trash2, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import type { DataPoint } from '@/types';
+
+interface DataUploadProps {
+  dataset: DataPoint[];
+  onDatasetChange: (dataset: DataPoint[]) => void;
+  onLoadSample: (type: 'parity' | 'iris') => void;
+}
+
+export function DataUpload({ dataset, onDatasetChange, onLoadSample }: DataUploadProps) {
+  const [csvInput, setCsvInput] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        const lines = text.trim().split('\n').filter(line => line.trim());
+        
+        // Skip header row if it looks like a header
+        const startIndex = lines[0].includes('feature') || lines[0].includes('Feature') || 
+                          lines[0].includes('label') || lines[0].includes('Label') ? 1 : 0;
+        
+        const parsed: DataPoint[] = lines.slice(startIndex).map((line) => {
+          const parts = line.split(',').map(p => p.trim());
+          const features = parts.slice(0, -1).map(parseFloat);
+          const label = parseInt(parts[parts.length - 1]);
+          return { features, label };
+        });
+        
+        if (parsed.some(p => isNaN(p.label) || p.features.some(isNaN))) {
+          throw new Error('Invalid data format');
+        }
+        
+        onDatasetChange(parsed);
+        setError(null);
+      } catch (err) {
+        setError('Failed to parse CSV. Ensure format is: feature1,feature2,...,label');
+      }
+    };
+    reader.readAsText(file);
+  }, [onDatasetChange]);
+
+  const handleCsvSubmit = useCallback(() => {
+    try {
+      const lines = csvInput.trim().split('\n');
+      const parsed: DataPoint[] = lines.map((line) => {
+        const parts = line.split(',').map(p => p.trim());
+        const features = parts.slice(0, -1).map(parseFloat);
+        const label = parseInt(parts[parts.length - 1]);
+        return { features, label };
+      });
+      
+      if (parsed.some(p => isNaN(p.label) || p.features.some(isNaN))) {
+        throw new Error('Invalid data format');
+      }
+      
+      onDatasetChange(parsed);
+      setError(null);
+    } catch (err) {
+      setError('Failed to parse CSV. Ensure format is: feature1,feature2,...,label');
+    }
+  }, [csvInput, onDatasetChange]);
+
+  const handleClear = useCallback(() => {
+    onDatasetChange([]);
+    setCsvInput('');
+    setError(null);
+  }, [onDatasetChange]);
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UploadIcon className="h-5 w-5" />
+            Upload Dataset
+          </CardTitle>
+          <CardDescription>
+            Upload a CSV file or paste data directly. Format: feature1,feature2,...,label
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-4 flex-wrap">
+            <div className="flex-1 min-w-[200px]">
+              <Input
+                type="file"
+                accept=".csv,.txt"
+                onChange={handleFileUpload}
+                className="cursor-pointer"
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => onLoadSample('parity')}
+              className="gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              Load Parity Sample
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => onLoadSample('iris')}
+              className="gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              Load Iris Sample
+            </Button>
+          </div>
+
+          <div className="border-t pt-4">
+            <Label>Or paste CSV data:</Label>
+            <textarea
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2 min-h-[120px] font-mono"
+              placeholder="0.4,0.75,1&#10;0.5,0.6,0&#10;..."
+              value={csvInput}
+              onChange={(e) => setCsvInput(e.target.value)}
+            />
+            <div className="flex gap-2 mt-2">
+              <Button onClick={handleCsvSubmit} size="sm">
+                Parse Data
+              </Button>
+              {dataset.length > 0 && (
+                <Button variant="outline" onClick={handleClear} size="sm">
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {dataset.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Data Preview
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="px-2 py-2 text-left font-medium">#</th>
+                    {dataset[0].features.map((_, i) => (
+                      <th key={i} className="px-2 py-2 text-left font-medium">
+                        Feature {i + 1}
+                      </th>
+                    ))}
+                    <th className="px-2 py-2 text-left font-medium">Label</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dataset.slice(0, 10).map((dp, i) => (
+                    <tr key={i} className="border-b">
+                      <td className="px-2 py-2 text-muted-foreground">{i + 1}</td>
+                      {dp.features.map((f, j) => (
+                        <td key={j} className="px-2 py-2">{f.toFixed(4)}</td>
+                      ))}
+                      <td className="px-2 py-2 font-medium">{dp.label}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {dataset.length > 10 && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  ... and {dataset.length - 10} more rows
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

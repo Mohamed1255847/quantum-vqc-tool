@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pennylane
+numpy
+python-multipart
+pydantic
