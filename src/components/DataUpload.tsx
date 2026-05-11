@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Upload as UploadIcon, FileText, Trash2, Sparkles } from 'lucide-react';
+import { Upload as UploadIcon, FileText, Trash2, Sparkles, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,9 @@ interface DataUploadProps {
 export function DataUpload({ dataset, onDatasetChange, onLoadSample }: DataUploadProps) {
   const [csvInput, setCsvInput] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [largeSize, setLargeSize] = useState(10000);
+  const [largeFeatures, setLargeFeatures] = useState(8);
+  const [generating, setGenerating] = useState(false);
 
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -71,6 +74,30 @@ export function DataUpload({ dataset, onDatasetChange, onLoadSample }: DataUploa
     }
   }, [csvInput, onDatasetChange]);
 
+  const generateLargeDataset = useCallback(() => {
+    setGenerating(true);
+    setError(null);
+
+    setTimeout(() => {
+      try {
+        const data: DataPoint[] = [];
+        for (let i = 0; i < largeSize; i++) {
+          const features = Array.from({ length: largeFeatures }, () =>
+            Math.round(Math.random())
+          );
+          const label = features.reduce((a, b) => a + b, 0) % 2;
+          data.push({ features, label });
+        }
+        onDatasetChange(data);
+        setError(null);
+      } catch (err) {
+        setError('Failed to generate dataset');
+      } finally {
+        setGenerating(false);
+      }
+    }, 0);
+  }, [largeSize, largeFeatures, onDatasetChange]);
+
   const handleClear = useCallback(() => {
     onDatasetChange([]);
     setCsvInput('');
@@ -79,6 +106,53 @@ export function DataUpload({ dataset, onDatasetChange, onLoadSample }: DataUploa
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Generate Large Dataset
+          </CardTitle>
+          <CardDescription>
+            Generate a synthetic dataset for performance testing
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Number of samples</Label>
+              <Input
+                type="number"
+                min={100}
+                max={100000}
+                step={100}
+                value={largeSize}
+                onChange={(e) => setLargeSize(parseInt(e.target.value) || 10000)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Features per sample</Label>
+              <Input
+                type="number"
+                min={2}
+                max={20}
+                step={1}
+                value={largeFeatures}
+                onChange={(e) => setLargeFeatures(parseInt(e.target.value) || 8)}
+              />
+            </div>
+          </div>
+          <Button
+            onClick={generateLargeDataset}
+            disabled={generating}
+            className="gap-2 w-full"
+            variant="secondary"
+          >
+            <Database className="h-4 w-4" />
+            {generating ? 'Generating...' : `Generate ${largeSize.toLocaleString()} Samples`}
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
