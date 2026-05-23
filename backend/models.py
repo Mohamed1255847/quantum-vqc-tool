@@ -64,3 +64,8 @@ class PredictionRequest(BaseModel):
 class PredictionResponse(BaseModel):
     predictions: List[float]
     classes: List[int]
+
+class RawPredictionResponse(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    raw_values: List[float]
+    classes: List[int]

@@ -8,18 +8,19 @@ import numpy as np
 import json
 
 from models import (
-    TrainingRequest, TrainingResponse, PredictionRequest, PredictionResponse
+    TrainingRequest, TrainingResponse, PredictionRequest, PredictionResponse,
+    RawPredictionResponse
 )
 from vqc import (
     train_variational_classifier, train_variational_classifier_stream,
-    predict, save_model, load_model, list_models
+    predict, predict_raw, save_model, load_model, list_models
 )
 
 app = FastAPI(title="Quantum Variational Classifier API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -30,6 +31,8 @@ class SaveModelRequest(BaseModel):
     bias: float
     metadata: Dict[str, Any]
     training_history: Optional[List[Dict[str, Any]]] = None
+    dataset: Optional[List[Dict[str, Any]]] = None
+    circuit_config: Optional[Dict[str, Any]] = None
 
 @app.get("/")
 async def root():
@@ -140,10 +143,26 @@ async def predict_endpoint(request: PredictionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/predict/raw", response_model=RawPredictionResponse)
+async def predict_raw_endpoint(request: PredictionRequest):
+    try:
+        encoding = request.encoding.value if hasattr(request.encoding, 'value') else str(request.encoding)
+        
+        raw_values, classes = predict_raw(
+            weights=request.weights,
+            bias=request.bias,
+            X=request.features,
+            encoding=encoding,
+            num_qubits=request.circuit.num_qubits
+        )
+        return RawPredictionResponse(raw_values=raw_values, classes=classes)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/models/save/{model_id}")
 async def save_model_endpoint(model_id: str, request: SaveModelRequest):
     try:
-        save_model(model_id, request.weights, request.bias, request.metadata, request.training_history)
+        save_model(model_id, request.weights, request.bias, request.metadata, request.training_history, request.dataset, request.circuit_config)
         return {"status": "success", "message": f"Model {model_id} saved"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

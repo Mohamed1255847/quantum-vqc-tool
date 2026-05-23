@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AlertCircle } from 'lucide-react';
 import { TrainingVisualization } from '@/components/TrainingVisualization';
-import type { TrainingHistoryItem } from '@/types';
+import { DecisionBoundary3D } from '@/components/DecisionBoundary3D';
+import type { DataPoint, CircuitConfig, TrainingHistoryItem } from '@/types';
 
 interface ModelManagerProps {
   trainingResult: {
@@ -15,6 +16,8 @@ interface ModelManagerProps {
   } | null;
   trainingHistory: TrainingHistoryItem[];
   onTrainingComplete?: () => void;
+  dataset: DataPoint[];
+  circuitConfig: CircuitConfig;
 }
 
 interface SavedModel {
@@ -31,7 +34,7 @@ interface SavedModel {
   };
 }
 
-export function ModelManager({ trainingResult, trainingHistory, onTrainingComplete }: ModelManagerProps) {
+export function ModelManager({ trainingResult, trainingHistory, onTrainingComplete, dataset, circuitConfig }: ModelManagerProps) {
   const [models, setModels] = useState<SavedModel[]>([]);
   const [modelName, setModelName] = useState('');
   const [modelDescription, setModelDescription] = useState('');
@@ -44,6 +47,8 @@ export function ModelManager({ trainingResult, trainingHistory, onTrainingComple
     bias: number;
     metadata: Record<string, unknown>;
     training_history?: TrainingHistoryItem[];
+    dataset?: DataPoint[];
+    circuit_config?: CircuitConfig;
   } | null>(null);
 
   const fetchModels = useCallback(async () => {
@@ -83,7 +88,13 @@ export function ModelManager({ trainingResult, trainingHistory, onTrainingComple
             created_at: new Date().toISOString(),
             model_type: 'variational_classifier'
           },
-          training_history: trainingHistory
+          training_history: trainingHistory,
+          dataset: dataset,
+          circuit_config: {
+            num_qubits: circuitConfig.num_qubits,
+            num_layers: circuitConfig.num_layers,
+            encoding: circuitConfig.encoding,
+          }
         })
       });
 
@@ -136,7 +147,9 @@ export function ModelManager({ trainingResult, trainingHistory, onTrainingComple
           weights: model.weights,
           bias: model.bias,
           metadata: model.metadata,
-          training_history: model.training_history
+          training_history: model.training_history,
+          dataset: model.dataset || dataset,
+          circuit_config: model.circuit_config || circuitConfig,
         });
       } else {
         const errorData = await response.json().catch(() => ({ detail: 'Failed to load' }));
@@ -294,6 +307,14 @@ export function ModelManager({ trainingResult, trainingHistory, onTrainingComple
               <div className="p-4 bg-muted/30 rounded-lg text-center text-sm text-muted-foreground">
                 Full training history is not available for this model. Only summary stats are shown.
               </div>
+            )}
+            {loadedModel.dataset && loadedModel.circuit_config && (
+              <DecisionBoundary3D
+                dataset={loadedModel.dataset}
+                weights={loadedModel.weights}
+                bias={loadedModel.bias}
+                circuitConfig={loadedModel.circuit_config}
+              />
             )}
           </CardContent>
         </Card>

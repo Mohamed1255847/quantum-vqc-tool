@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VQC 3D Decision Boundary</title>
+<script src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f172a; color: #e2e8f0; padding: 20px;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  h1 small { font-size: 0.8rem; color: #64748b; font-weight: normal; }
+  .subtitle { color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .card {
+    background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;
+  }
+  .card h2 { font-size: 0.9rem; margin-bottom: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+  label { display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 4px; }
+  input, select, textarea {
+    width: 100%; padding: 8px 10px; border-radius: 6px;
+    background: #0f172a; border: 1px solid #334155; color: #e2e8f0;
+    font-size: 0.85rem; font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: #3b82f6; }
+  textarea { min-height: 100px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .btn {
+    padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer;
+    font-size: 0.85rem; font-weight: 600; transition: all 0.15s;
+  }
+  .btn-primary { background: #3b82f6; color: #fff; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: #334155; color: #e2e8f0; }
+  .btn-secondary:hover { background: #475569; }
+  .actions { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .error { color: #ef4444; font-size: 0.8rem; margin-top: 8px; }
+  .info { color: #22c55e; font-size: 0.8rem; margin-top: 8px; }
+  .plot-container { width: 100%; height: 600px; border-radius: 8px; overflow: hidden; background: #1e293b; border: 1px solid #334155; }
+  .help-text { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .tab { padding: 6px 14px; border-radius: 6px; border: 1px solid #334155; background: transparent; color: #94a3b8; cursor: pointer; font-size: 0.8rem; }
+  .tab.active { background: #334155; color: #e2e8f0; border-color: #475569; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .flex-row { display: flex; gap: 12px; align-items: end; }
+  .flex-row > * { flex: 1; }
+  code { background: #0f172a; padding: 1px 5px; border-radius: 4px; font-size: 0.8rem; }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status-dot.online { background: #22c55e; }
+  .status-dot.offline { background: #ef4444; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2a4 4 0 0 1 4 4c0 2-2 4-4 6-2-2-4-4-4-6a4 4 0 0 1 4-4z"/>
+      <path d="M12 2v20"/>
+      <path d="M12 22c2 0 4-2 4-4"/>
+    </svg>
+    VQC 3D Decision Boundary
+    <small>standalone visualizer</small>
+  </h1>
+  <p class="subtitle">Connects to the running backend (<code>http://localhost:8000</code>) to compute predictions on a mesh grid over the 2D feature space.</p>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="flex-row">
+      <div>
+        <label>Backend URL</label>
+        <input id="backendUrl" value="http://localhost:8000" />
+      </div>
+      <div style="flex:0">
+        <button class="btn btn-secondary" onclick="checkBackend()" style="white-space:nowrap">Check Connection</button>
+      </div>
+      <div style="flex:2;padding-bottom:4px">
+        <span id="backendStatus" style="font-size:0.85rem;color:#64748b">Not checked</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>1. Model</h2>
+      <div class="tabs">
+        <button class="tab active" data-tab="model-paste" onclick="switchTab('model', 'paste')">Paste Weights</button>
+        <button class="tab" data-tab="model-load" onclick="switchTab('model', 'load')">Load from Backend</button>
+      </div>
+      <div id="model-paste" class="tab-content active">
+        <div class="row">
+          <div>
+            <label>Weights (JSON array)</label>
+            <textarea id="weightsJson" rows="6" placeholder='[[[0.1, -0.2, 0.3], ...]]'></textarea>
+          </div>
+          <div>
+            <label>Bias</label>
+            <input id="bias" value="0.0" />
+          </div>
+        </div>
+      </div>
+      <div id="model-load" class="tab-content">
+        <div class="flex-row">
+          <div>
+            <label>Saved Model ID</label>
+            <input id="modelId" placeholder="e.g. 2, my_model" />
+          </div>
+          <div>
+            <button class="btn btn-secondary" onclick="loadSavedModel()">Load</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Dataset</h2>
+      <div class="tabs">
+        <button class="tab active" data-tab="data-paste" onclick="switchTab('data', 'paste')">Paste JSON</button>
+        <button class="tab" data-tab="data-preset" onclick="switchTab('data', 'preset')">Presets</button>
+      </div>
+      <div id="data-paste" class="tab-content active">
+        <label>Data points (JSON array of {features, label})</label>
+        <textarea id="datasetJson" rows="6" placeholder='[{"features":[0.4,0.7],"label":1}, ...]'></textarea>
+      </div>
+      <div id="data-preset" class="tab-content">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-secondary" onclick="loadPreset('iris')">Iris Sample (12 pts, 2 features)</button>
+          <button class="btn btn-secondary" onclick="loadPreset('simple')">Simple Classification (15 pts, 2 features)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>3. Circuit Config</h2>
+      <div class="row">
+        <div>
+          <label>Encoding</label>
+          <select id="encoding">
+            <option value="basis">Basis</option>
+            <option value="amplitude">Amplitude</option>
+          </select>
+        </div>
+        <div>
+          <label>Num Qubits</label>
+          <input id="numQubits" type="number" value="2" min="1" max="20" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Num Layers</label>
+          <input id="numLayers" type="number" value="6" min="1" max="50" />
+        </div>
+        <div>
+          <label>Grid Resolution</label>
+          <input id="resolution" type="number" value="40" min="10" max="100" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="display:flex;flex-direction:column;justify-content:space-between">
+      <h2>4. Generate</h2>
+      <p style="font-size:0.8rem;color:#94a3b8;margin-bottom:12px">
+        Generates a mesh grid over the feature space, computes raw PauliZ predictions via the backend, and renders a 3D surface with data points overlaid.
+      </p>
+      <button class="btn btn-primary" onclick="generatePlot()" style="width:100%">Generate 3D Plot</button>
+      <div id="generateStatus" class="help-text" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-secondary" onclick="resetView()">Reset Camera</button>
+    <span id="pointCount" style="font-size:0.8rem;color:#64748b"></span>
+  </div>
+
+  <div id="plotContainer" class="plot-container"></div>
+
+  <div id="errorBox" class="error" style="margin-top:8px;display:none"></div>
+</div>
+
+<script>
+const PRESETS = {
+  iris: [
+    { features: [0.4, 0.7], label: 1 }, { features: [0.4, 0.75], label: 1 },
+    { features: [0.45, 0.8], label: 1 }, { features: [0.5, 0.6], label: 1 },
+    { features: [0.55, 0.65], label: 1 }, { features: [0.6, 0.55], label: 0 },
+    { features: [0.65, 0.5], label: 0 }, { features: [0.7, 0.45], label: 0 },
+    { features: [0.75, 0.4], label: 0 }, { features: [0.8, 0.35], label: 0 },
+    { features: [0.85, 0.3], label: 0 }, { features: [0.9, 0.25], label: 0 },
+  ],
+  simple: [
+    { features: [0.4, 0.7], label: 1 }, { features: [0.4, 0.75], label: 1 },
+    { features: [0.45, 0.8], label: 1 }, { features: [0.5, 0.6], label: 1 },
+    { features: [0.55, 0.65], label: 1 }, { features: [0.6, 0.55], label: 1 },
+    { features: [0.65, 0.5], label: 0 }, { features: [0.7, 0.45], label: 0 },
+    { features: [0.75, 0.4], label: 0 }, { features: [0.8, 0.35], label: 0 },
+    { features: [0.85, 0.3], label: 0 }, { features: [0.9, 0.25], label: 0 },
+    { features: [0.95, 0.2], label: 0 }, { features: [0.85, 0.45], label: 0 },
+    { features: [0.55, 0.7], label: 1 },
+  ],
+};
+
+const DEFAULT_WEIGHTS_IRIS = null;
+
+let currentPlot = null;
+
+function $(id) { return document.getElementById(id); }
+
+function switchTab(group, tab) {
+  document.querySelectorAll(`[data-tab="${group}-${tab}"]`).forEach(el => el.classList.add('active'));
+  document.querySelectorAll(`#${group}-paste, #${group}-preset, #${group}-load`).forEach(el => el.classList.remove('active'));
+  document.getElementById(`${group}-${tab}`).classList.add('active');
+}
+
+async function checkBackend() {
+  const url = $('backendUrl').value;
+  const status = $('backendStatus');
+  try {
+    const resp = await fetch(`${url}/health`);
+    if (resp.ok) {
+      status.innerHTML = '<span class="status-dot online"></span>Connected';
+    } else {
+      status.innerHTML = '<span class="status-dot offline"></span>Error: ' + resp.status;
+    }
+  } catch (e) {
+    status.innerHTML = '<span class="status-dot offline"></span>Cannot connect';
+  }
+}
+
+async function loadSavedModel() {
+  const url = $('backendUrl').value;
+  const modelId = $('modelId').value.trim();
+  if (!modelId) { showError('Enter a model ID'); return; }
+  try {
+    const resp = await fetch(`${url}/models/${modelId}`);
+    if (!resp.ok) throw new Error(`Status ${resp.status}`);
+    const data = await resp.json();
+    $('weightsJson').value = JSON.stringify(data.weights, null, 1);
+    $('bias').value = data.bias || 0;
+    if (data.metadata?.num_qubits) $('numQubits').value = data.metadata.num_qubits;
+    if (data.metadata?.num_layers) $('numLayers').value = data.metadata.num_layers;
+    if (data.metadata?.encoding) $('encoding').value = data.metadata.encoding;
+    hideError();
+    $('generateStatus').textContent = `Loaded model "${modelId}"`;
+  } catch (e) {
+    showError(`Failed to load model: ${e.message}`);
+  }
+}
+
+function loadPreset(name) {
+  $('datasetJson').value = JSON.stringify(PRESETS[name], null, 2);
+  const numFeat = PRESETS[name][0].features.length;
+  $('numQubits').value = numFeat;
+  $('encoding').value = name === 'iris' ? 'amplitude' : 'amplitude';
+  $('numLayers').value = name === 'iris' ? 6 : 6;
+  hideError();
+  $('generateStatus').textContent = `Loaded ${name} preset (${PRESETS[name].length} samples, ${numFeat} features)`;
+}
+
+function showError(msg) {
+  const box = $('errorBox');
+  box.textContent = msg;
+  box.style.display = 'block';
+}
+
+function hideError() {
+  $('errorBox').style.display = 'none';
+}
+
+function linspace(start, end, n) {
+  const step = (end - start) / (n - 1);
+  return Array.from({ length: n }, (_, i) => start + i * step);
+}
+
+async function generatePlot() {
+  const backendUrl = $('backendUrl').value;
+  const statusEl = $('generateStatus');
+  statusEl.textContent = 'Generating...';
+  hideError();
+
+  let dataset, weights, biasStr;
+  try {
+    dataset = JSON.parse($('datasetJson').value);
+    if (!Array.isArray(dataset) || dataset.length === 0) throw new Error('Dataset must be a non-empty array');
+    weights = JSON.parse($('weightsJson').value);
+    biasStr = parseFloat($('bias').value);
+  } catch (e) {
+    showError(`Parse error: ${e.message}`);
+    statusEl.textContent = '';
+    return;
+  }
+
+  const numFeatures = dataset[0].features.length;
+  if (numFeatures !== 2) {
+    showError(`3D boundary requires exactly 2 features per sample (got ${numFeatures})`);
+    statusEl.textContent = '';
+    return;
+  }
+
+  const encoding = $('encoding').value;
+  const numQubits = parseInt($('numQubits').value);
+  const numLayers = parseInt($('numLayers').value);
+  const resolution = parseInt($('resolution').value);
+
+  const f0 = dataset.map(d => d.features[0]);
+  const f1 = dataset.map(d => d.features[1]);
+  const min0 = Math.min(...f0), max0 = Math.max(...f0);
+  const min1 = Math.min(...f1), max1 = Math.max(...f1);
+  const pad0 = (max0 - min0) * 0.15 || 0.2;
+  const pad1 = (max1 - min1) * 0.15 || 0.2;
+
+  const x = linspace(min0 - pad0, max0 + pad0, resolution);
+  const y = linspace(min1 - pad1, max1 + pad1, resolution);
+
+  const gridPoints = [];
+  for (let j = 0; j < y.length; j++)
+    for (let i = 0; i < x.length; i++)
+      gridPoints.push([x[i], y[j]]);
+
+  statusEl.textContent = `Predicting on ${gridPoints.length} grid points...`;
+
+  try {
+    const resp = await fetch(`${backendUrl}/predict/raw`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        weights,
+        bias: biasStr,
+        features: gridPoints,
+        circuit: { num_qubits: numQubits, num_layers: numLayers, encoding },
+        encoding,
+      }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => resp.statusText);
+      throw new Error(`Backend error: ${resp.status} ${errText}`);
+    }
+
+    const data = await resp.json();
+    const rawValues = data.raw_values;
+
+    const Z = [];
+    for (let j = 0; j < y.length; j++)
+      Z.push(rawValues.slice(j * x.length, (j + 1) * x.length));
+
+    const scatter0 = dataset.filter(d => d.label === 0);
+    const scatter1 = dataset.filter(d => d.label === 1);
+
+    const traceSurface = {
+      type: 'surface',
+      x, y, z: Z,
+      colorscale: [
+        [0, '#3b82f6'],
+        [0.5, '#f8fafc'],
+        [1, '#ef4444'],
+      ],
+      showscale: true,
+      opacity: 0.85,
+      contours: {
+        z: { show: true, usecolormap: true, highlightcolor: '#fbbf24', project: { z: true } },
+      },
+      hovertemplate: 'f1: %{x:.3f}<br>f2: %{y:.3f}<br>pred: %{z:.3f}<extra></extra>',
+    };
+
+    const traceClass0 = {
+      type: 'scatter3d',
+      mode: 'markers',
+      x: scatter0.map(d => d.features[0]),
+      y: scatter0.map(d => d.features[1]),
+      z: scatter0.map(() => 1.1),
+      marker: { size: 8, color: '#3b82f6', symbol: 'circle', line: { color: '#ffffff', width: 1.5 } },
+      name: 'Class 0 (truth)',
+      hovertemplate: 'f1: %{x:.3f}<br>f2: %{y:.3f}<br>class: 0<extra></extra>',
+    };
+
+    const traceClass1 = {
+      type: 'scatter3d',
+      mode: 'markers',
+      x: scatter1.map(d => d.features[0]),
+      y: scatter1.map(d => d.features[1]),
+      z: scatter1.map(() => 1.1),
+      marker: { size: 8, color: '#ef4444', symbol: 'diamond', line: { color: '#ffffff', width: 1.5 } },
+      name: 'Class 1 (truth)',
+      hovertemplate: 'f1: %{x:.3f}<br>f2: %{y:.3f}<br>class: 1<extra></extra>',
+    };
+
+    const layout = {
+      title: { text: 'Decision Surface &bull; Raw PauliZ Output', font: { size: 16, color: '#e2e8f0' } },
+      scene: {
+        xaxis: { title: 'Feature 1', gridcolor: '#334155', zerolinecolor: '#475569' },
+        yaxis: { title: 'Feature 2', gridcolor: '#334155', zerolinecolor: '#475569' },
+        zaxis: { title: 'Raw Prediction', range: [-1.1, 1.1], gridcolor: '#334155', zerolinecolor: '#475569' },
+        camera: { eye: { x: 1.5, y: 1.5, z: 0.8 } },
+        aspectmode: 'cube',
+      },
+      margin: { l: 0, r: 0, t: 40, b: 0 },
+      paper_bgcolor: '#1e293b',
+      plot_bgcolor: '#1e293b',
+      font: { color: '#94a3b8' },
+      hovermode: 'closest',
+      legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(15,23,42,0.8)', font: { color: '#e2e8f0' } },
+    };
+
+    const config = {
+      responsive: true,
+      displayModeBar: true,
+      modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+      modeBarButtonsToAdd: [{
+        name: 'Reset Camera',
+        icon: Plotly.Icons.home,
+        click: function(gd) { Plotly.relayout(gd, {'scene.camera': { eye: { x: 1.5, y: 1.5, z: 0.8 } } }); }
+      }],
+    };
+
+    if (currentPlot) await Plotly.react($('plotContainer'), [traceSurface, traceClass0, traceClass1], layout, config);
+    else await Plotly.newPlot($('plotContainer'), [traceSurface, traceClass0, traceClass1], layout, config);
+    currentPlot = true;
+
+    statusEl.textContent = `Done — ${dataset.length} data points, ${resolution}x${resolution} grid`;
+    $('pointCount').textContent = `${dataset.length} pts | ${gridPoints.length} grid pts`;
+  } catch (e) {
+    showError(`Failed: ${e.message}`);
+    statusEl.textContent = '';
+  }
+}
+
+function resetView() {
+  if (currentPlot) {
+    Plotly.relayout($('plotContainer'), { 'scene.camera': { eye: { x: 1.5, y: 1.5, z: 0.8 } } });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  checkBackend();
+  loadPreset('iris');
+});
+</script>
+</body>
+</html>

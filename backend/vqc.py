@@ -257,6 +257,8 @@ def train_variational_classifier_stream(
 def predict(weights, bias, X, encoding="basis", num_qubits=4):
     X = [[float(v) for v in row] for row in X]
     X = np.array(X, dtype=float)
+    weights = np.array(weights, dtype=float)
+    num_qubits = int(num_qubits)
     
     if encoding == "basis":
         num_qubits_actual = len(X[0])
@@ -288,7 +290,41 @@ def predict(weights, bias, X, encoding="basis", num_qubits=4):
     
     return predictions, classes
 
-def save_model(model_id: str, weights, bias: float, metadata: Dict[str, Any], training_history: Optional[List[Dict[str, Any]]] = None):
+
+def predict_raw(weights, bias, X, encoding="basis", num_qubits=4):
+    X = [[float(v) for v in row] for row in X]
+    X = np.array(X, dtype=float)
+    weights = np.array(weights, dtype=float)
+    num_qubits = int(num_qubits)
+
+    if encoding == "basis":
+        num_qubits_actual = len(X[0])
+    else:
+        num_qubits_actual = num_qubits
+
+    dev = qml.device("default.qubit", wires=num_qubits_actual)
+
+    @qml.qnode(dev)
+    def circuit(weights, x):
+        for i, val in enumerate(x):
+            if val > 0.5:
+                qml.PauliX(wires=i)
+        for layer_weights in weights:
+            for wire in range(num_qubits_actual):
+                qml.Rot(layer_weights[wire, 0], layer_weights[wire, 1], layer_weights[wire, 2], wires=wire)
+            for i in range(num_qubits_actual):
+                qml.CNOT(wires=[i, (i + 1) % num_qubits_actual])
+        return qml.expval(qml.PauliZ(0))
+
+    raw_values = []
+    for x in X:
+        raw = float(circuit(weights, x) + bias)
+        raw_values.append(raw)
+
+    classes = [1 if v > 0 else 0 for v in raw_values]
+    return raw_values, classes
+
+def save_model(model_id: str, weights, bias: float, metadata: Dict[str, Any], training_history: Optional[List[Dict[str, Any]]] = None, dataset: Optional[List[Dict[str, Any]]] = None, circuit_config: Optional[Dict[str, Any]] = None):
     ensure_models_dir()
     model_data = {
         "weights": weights.tolist() if hasattr(weights, "tolist") else weights,
@@ -297,6 +333,10 @@ def save_model(model_id: str, weights, bias: float, metadata: Dict[str, Any], tr
     }
     if training_history:
         model_data["training_history"] = training_history
+    if dataset:
+        model_data["dataset"] = dataset
+    if circuit_config:
+        model_data["circuit_config"] = circuit_config
     with open(os.path.join(MODELS_DIR, f"{model_id}.json"), "w") as f:
         json.dump(model_data, f)
     return True

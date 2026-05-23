@@ -9,6 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { DataUpload } from '@/components/DataUpload';
 import { CircuitConfig } from '@/components/CircuitConfig';
 import { TrainingVisualization } from '@/components/TrainingVisualization';
+import { DecisionBoundary3D } from '@/components/DecisionBoundary3D';
 import { ModelManager } from '@/components/ModelManager';
 import type { DataPoint, CircuitConfig as CircuitConfigType, TrainingConfig, TrainingHistoryItem } from '@/types';
 
@@ -420,17 +421,33 @@ function App() {
                   </div>
 
                   {(showTrainingResults && trainingHistory.length > 0) && (
-                    <TrainingVisualization data={trainingHistory} />
+                    <>
+                      <TrainingVisualization data={trainingHistory} />
+                      {trainingResult && (
+                        <DecisionBoundary3D
+                          dataset={dataset}
+                          weights={trainingResult.weights}
+                          bias={trainingResult.bias}
+                          circuitConfig={circuitConfig}
+                        />
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>
             )}
 
             {activeTab === 'models' && (
-              <ModelManager trainingResult={trainingResult} trainingHistory={trainingHistory} onTrainingComplete={() => {
-                setShowTrainingResults(true);
-                setActiveTab('training');
-              }} />
+              <ModelManager
+                trainingResult={trainingResult}
+                trainingHistory={trainingHistory}
+                onTrainingComplete={() => {
+                  setShowTrainingResults(true);
+                  setActiveTab('training');
+                }}
+                dataset={dataset}
+                circuitConfig={circuitConfig}
+              />
             )}
           </div>
 
