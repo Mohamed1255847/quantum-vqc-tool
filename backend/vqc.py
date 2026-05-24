@@ -59,9 +59,12 @@ def train_variational_classifier(
     
     @qml.qnode(dev)
     def circuit(weights, x):
-        for i, val in enumerate(x):
-            if val > 0.5:
-                qml.PauliX(wires=i)
+        if encoding == "amplitude":
+            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True)
+        else:
+            for i, val in enumerate(x):
+                if val > 0.5:
+                    qml.PauliX(wires=i)
         
         for layer_weights in weights:
             for wire in range(num_qubits_actual):
@@ -163,9 +166,12 @@ def train_variational_classifier_stream(
 
     @qml.qnode(dev)
     def circuit(weights, x):
-        for i, val in enumerate(x):
-            if val > 0.5:
-                qml.PauliX(wires=i)
+        if encoding == "amplitude":
+            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True)
+        else:
+            for i, val in enumerate(x):
+                if val > 0.5:
+                    qml.PauliX(wires=i)
 
         for layer_weights in weights:
             for wire in range(num_qubits_actual):
@@ -269,9 +275,12 @@ def predict(weights, bias, X, encoding="basis", num_qubits=4):
     
     @qml.qnode(dev)
     def circuit(weights, x):
-        for i, val in enumerate(x):
-            if val > 0.5:
-                qml.PauliX(wires=i)
+        if encoding == "amplitude":
+            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True)
+        else:
+            for i, val in enumerate(x):
+                if val > 0.5:
+                    qml.PauliX(wires=i)
         
         for layer_weights in weights:
             for wire in range(num_qubits_actual):
@@ -306,9 +315,12 @@ def predict_raw(weights, bias, X, encoding="basis", num_qubits=4):
 
     @qml.qnode(dev)
     def circuit(weights, x):
-        for i, val in enumerate(x):
-            if val > 0.5:
-                qml.PauliX(wires=i)
+        if encoding == "amplitude":
+            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True)
+        else:
+            for i, val in enumerate(x):
+                if val > 0.5:
+                    qml.PauliX(wires=i)
         for layer_weights in weights:
             for wire in range(num_qubits_actual):
                 qml.Rot(layer_weights[wire, 0], layer_weights[wire, 1], layer_weights[wire, 2], wires=wire)
