@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Upload as UploadIcon, FileText, Trash2, Sparkles, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,31 +19,29 @@ export function DataUpload({ dataset, onDatasetChange, onLoadSample }: DataUploa
   const [largeFeatures, setLargeFeatures] = useState(8);
   const [generating, setGenerating] = useState(false);
 
+  useEffect(() => {
+    setError(null);
+  }, [dataset]);
+
+  const parseCSV = useCallback((text: string): DataPoint[] => {
+    const lines = text.trim().split('\n').filter(line => line.trim());
+    if (lines.length === 0) return [];
+    const startIndex = lines[0].split(',').some(v => isNaN(parseFloat(v.trim()))) ? 1 : 0;
+    return lines.slice(startIndex).map(line => {
+      const parts = line.split(',').map(p => p.trim());
+      return { features: parts.slice(0, -1).map(parseFloat), label: parseInt(parts[parts.length - 1], 10) };
+    });
+  }, []);
+
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const text = e.target?.result as string;
-        const lines = text.trim().split('\n').filter(line => line.trim());
-        
-        // Skip header row if it looks like a header
-        const startIndex = lines[0].includes('feature') || lines[0].includes('Feature') || 
-                          lines[0].includes('label') || lines[0].includes('Label') ? 1 : 0;
-        
-        const parsed: DataPoint[] = lines.slice(startIndex).map((line) => {
-          const parts = line.split(',').map(p => p.trim());
-          const features = parts.slice(0, -1).map(parseFloat);
-          const label = parseInt(parts[parts.length - 1]);
-          return { features, label };
-        });
-        
-        if (parsed.some(p => isNaN(p.label) || p.features.some(isNaN))) {
+        const parsed = parseCSV(e.target?.result as string || '');
+        if (parsed.some(p => isNaN(p.label) || p.features.some(isNaN)))
           throw new Error('Invalid data format');
-        }
-        
         onDatasetChange(parsed);
         setError(null);
       } catch (err) {
@@ -51,28 +49,20 @@ export function DataUpload({ dataset, onDatasetChange, onLoadSample }: DataUploa
       }
     };
     reader.readAsText(file);
-  }, [onDatasetChange]);
+  }, [onDatasetChange, parseCSV]);
 
   const handleCsvSubmit = useCallback(() => {
+    if (!csvInput.trim()) return;
     try {
-      const lines = csvInput.trim().split('\n');
-      const parsed: DataPoint[] = lines.map((line) => {
-        const parts = line.split(',').map(p => p.trim());
-        const features = parts.slice(0, -1).map(parseFloat);
-        const label = parseInt(parts[parts.length - 1]);
-        return { features, label };
-      });
-      
-      if (parsed.some(p => isNaN(p.label) || p.features.some(isNaN))) {
+      const parsed = parseCSV(csvInput);
+      if (parsed.some(p => isNaN(p.label) || p.features.some(isNaN)))
         throw new Error('Invalid data format');
-      }
-      
       onDatasetChange(parsed);
       setError(null);
     } catch (err) {
       setError('Failed to parse CSV. Ensure format is: feature1,feature2,...,label');
     }
-  }, [csvInput, onDatasetChange]);
+  }, [csvInput, onDatasetChange, parseCSV]);
 
   const generateLargeDataset = useCallback(() => {
     setGenerating(true);
@@ -200,7 +190,7 @@ export function DataUpload({ dataset, onDatasetChange, onLoadSample }: DataUploa
               onChange={(e) => setCsvInput(e.target.value)}
             />
             <div className="flex gap-2 mt-2">
-              <Button onClick={handleCsvSubmit} size="sm">
+              <Button onClick={handleCsvSubmit} size="sm" disabled={!csvInput.trim()}>
                 Parse Data
               </Button>
               {dataset.length > 0 && (

@@ -60,7 +60,7 @@ def train_variational_classifier(
     @qml.qnode(dev)
     def circuit(weights, x):
         if encoding == "amplitude":
-            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True)
+            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True, pad_with=0.0)
         else:
             for i, val in enumerate(x):
                 if val > 0.5:
@@ -167,7 +167,7 @@ def train_variational_classifier_stream(
     @qml.qnode(dev)
     def circuit(weights, x):
         if encoding == "amplitude":
-            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True)
+            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True, pad_with=0.0)
         else:
             for i, val in enumerate(x):
                 if val > 0.5:
@@ -276,7 +276,7 @@ def predict(weights, bias, X, encoding="basis", num_qubits=4):
     @qml.qnode(dev)
     def circuit(weights, x):
         if encoding == "amplitude":
-            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True)
+            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True, pad_with=0.0)
         else:
             for i, val in enumerate(x):
                 if val > 0.5:
@@ -316,7 +316,7 @@ def predict_raw(weights, bias, X, encoding="basis", num_qubits=4):
     @qml.qnode(dev)
     def circuit(weights, x):
         if encoding == "amplitude":
-            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True)
+            qml.AmplitudeEmbedding(features=x, wires=range(num_qubits_actual), normalize=True, pad_with=0.0)
         else:
             for i, val in enumerate(x):
                 if val > 0.5:
