@@ -40,7 +40,7 @@ export function DataUpload({ dataset, onDatasetChange, onLoadSample }: DataUploa
     reader.onload = (e) => {
       try {
         const parsed = parseCSV(e.target?.result as string || '');
-        if (parsed.some(p => isNaN(p.label) || p.features.some(isNaN)))
+        if (parsed.length === 0 || parsed.some(p => isNaN(p.label) || p.features.some(isNaN)))
           throw new Error('Invalid data format');
         onDatasetChange(parsed);
         setError(null);
@@ -55,7 +55,7 @@ export function DataUpload({ dataset, onDatasetChange, onLoadSample }: DataUploa
     if (!csvInput.trim()) return;
     try {
       const parsed = parseCSV(csvInput);
-      if (parsed.some(p => isNaN(p.label) || p.features.some(isNaN)))
+      if (parsed.length === 0 || parsed.some(p => isNaN(p.label) || p.features.some(isNaN)))
         throw new Error('Invalid data format');
       onDatasetChange(parsed);
       setError(null);
